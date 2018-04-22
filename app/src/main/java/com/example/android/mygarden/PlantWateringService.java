@@ -17,9 +17,12 @@ package com.example.android.mygarden;
 */
 
 import android.app.IntentService;
+import android.appwidget.AppWidgetManager;
+import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.provider.Settings;
 
@@ -59,6 +62,12 @@ public class PlantWateringService extends IntentService {
         context.startService(intent);
     }
 
+    public static void startActionUpdatePlantWidgets(Context context){
+        Intent intent = new Intent(context, PlantWateringService.class);
+        intent.setAction(ACTION_UPDATE_PLANT_WIDGETS);
+        context.startService(intent);
+    }
+
     /**
      * @param intent
      */
@@ -75,6 +84,29 @@ public class PlantWateringService extends IntentService {
     }
 
     private void handleActionUpdatePlantWidgets() {
+        Uri PLANT_URI = BASE_CONTENT_URI.buildUpon().appendPath(PATH_PLANTS).build();
+        // get all plants and order them by last watered time column
+        Cursor cursor = getContentResolver().query(PLANT_URI, null,
+                null, null, PlantContract.PlantEntry.COLUMN_LAST_WATERED_TIME);
+        // default image in case there are no plants to water
+        int imgRes = R.drawable.grass;
+        if (cursor != null && cursor.getCount() > 0){
+            cursor.moveToFirst();
+            int createTimeIndex = cursor.getColumnIndex(PlantContract.PlantEntry.COLUMN_CREATION_TIME);
+            int waterTimeIndex = cursor.getColumnIndex(PlantContract.PlantEntry.COLUMN_LAST_WATERED_TIME);
+            int plantTypeIndex = cursor.getColumnIndex(PlantContract.PlantEntry.COLUMN_PLANT_TYPE);
+            long time = System.currentTimeMillis();
+            long wateredAt = cursor.getLong(waterTimeIndex);
+            long createdAt = cursor.getLong(createTimeIndex);
+            int plantType = cursor.getInt(plantTypeIndex);
+            cursor.close();
+            imgRes = PlantUtils.getPlantImageRes(this, time - createdAt, time - wateredAt, plantType);
+        }
+
+        AppWidgetManager appWidgetManager = AppWidgetManager.getInstance(this);
+        int[] appWidgetIds = appWidgetManager.getAppWidgetIds(new ComponentName(this, PlantWidgetProvider.class));
+        // update all widgets
+        PlantWidgetProvider.updatePlantWidgets(this, appWidgetManager, imgRes, appWidgetIds);
     }
 
     /**
